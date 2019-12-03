@@ -1,0 +1,21 @@
+plugins {
+    id 'java'
+}
+
+group 'mq'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    maven { url 'http://maven.aliyun.com/nexus/content/groups/public' }
+    mavenCentral()
+}
+
+dependencies {
+    compile ('org.apache.rocketmq:rocketmq-client:4.5.2')
+    testCompile group: 'org.mockito', name: 'mockito-core', version: '3.2.0'
+    testCompile group: 'org.assertj', name: 'assertj-core', version: '3.14.0'
+    testCompile group: 'org.hamcrest', name: 'hamcrest-core', version: '2.2'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
