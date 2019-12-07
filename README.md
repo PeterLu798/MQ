@@ -153,45 +153,47 @@ App -> 网关 -> 令牌队列 -> 秒杀服务 <br>
 <br>&emsp;异步的优势这么明显，那么Java里提供了哪些异步的框架供我们使用呢？
 <br>&emsp;比较常用也比较流行的异步框架是CompletableFuture，该框架不仅提供了很多异步方法，还允许自定义线程池，来实现用户自己控制线程数。使用示例如下：
 ```java
-public class T {
-        private static ExecutorService executorService = Executors.newFixedThreadPool(1000);
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-        /**
-         * 不需要返回值
-         */
-        public void test() {
-            for (int i = 0; i < 10000; i++) {
-                CompletableFuture.runAsync(() -> {
-                    // TODO sth...
-                }, executorService);
-            }
+public class CompletableFutureTest {
+    private static ExecutorService executorService = Executors.newFixedThreadPool(1000);
+
+    /**
+     * 不需要返回值
+     */
+    public void test() {
+        for (int i = 0; i < 10000; i++) {
+            CompletableFuture.runAsync(() -> {
+                // TODO sth...
+            }, executorService);
         }
-
-        /**
-         * 如果需要返回值，可配合使用CountDownLatch
-         * @return
-         */
-        public boolean test1(){
-            CountDownLatch countDownLatch = new CountDownLatch(10000);
-            for(int i=0; i<10000; i++){
-                CompletableFuture.runAsync(() -> {
-                    //TODO sth...
-                }, executorService).whenComplete((result, ex) -> countDownLatch.countDown());
-            }
-            try {
-                countDownLatch.await();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            return true;
-        }
-
     }
 
+    /**
+     * 如果需要返回值，可配合使用CountDownLatch
+     *
+     * @return
+     */
+    public boolean test1() {
+        CountDownLatch countDownLatch = new CountDownLatch(10000);
+        for (int i = 0; i < 10000; i++) {
+            CompletableFuture.runAsync(() -> {
+                //TODO sth...
+            }, executorService).whenComplete((result, ex) -> countDownLatch.countDown());
+        }
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return true;
+    }
+}
 ```
-
 <h3 id="9">9. Java中的线程池和并发工具类</h3>
-
 <br>&emsp;加这节是因为上节说的异步框架中使用了线程池以及并发控制的工具类，那么这节就详细说说其使用方式及原理。
 <br>9.1 Executor架构体系
 <br>9.1.1 Executor两级调度模型
