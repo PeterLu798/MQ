@@ -9,7 +9,7 @@
 * [7. 消息积压如何解决](#7)
 * [8. 如何使用异步设计提升系统性能](#8)
 * [9. Java中的线程池和并发工具类](#9)
-10. 消息队列中的高性能序列化和反序列化
+* [10. 消息队列中的高性能序列化和反序列化](#10)
 11. 消息队列中的高性能传输协议
 12. 内存管理：如何避免内存溢出和频繁GC
 13. kafka如何实现高性能I/O
@@ -94,15 +94,15 @@ App -> 网关 -> 令牌队列 -> 秒杀服务 <br>
 <br>&emsp;消费组：RocketMQ中订阅者是通过消费组来体现的。每个消费组可以得到主题的一份完整的消息，不同消费组之间不受任何影响。每个消费组中包含多个消费者，同一组内的消费者是竞争的关系，比如一条消息被消费者1消费了，那么该组内其他消费者就不能再消费这条消息了。
 <br>&emsp;消费位置：一个队列可能对应多个消费组，那么如何标识队列中的某条消息有没有被消费过呢？为了记录这个信息，RocketMQ为每个消费组对应每个队列维护了一个位置变量，称为消费位置。有了消费位置，服务端就可以通过计算那些消息被全部消费过了，然后可以从队列中删除掉了。
 <br>RocketMQ的结构图如下<br>
-![](https://github.com/PeterLu798/MQ.png)
+![](https://github.com/PeterLu798/MQ/blob/master/src/main/java/com/lbj/mq/rocketmq/Z_RocketMQ_1.png)
 * Kafka
 <br>Kafka的模型以及概念和RocketMQ的一模一样，只是把队列叫做分区，上面也已经说了。
 
 <h3 id="4">4. 利用事务消息实现分布式事务</h3>
 &emsp;本节主要使用RocketMQ的事务消息来实现分布式事务。
 <br>&emsp;RocketMQ主要使用“半消息”来实现事务消息。“半消息”不是半个消息，消息本身是完整的，只是在发出以后消费者不能立即去消费它，此时该消息对于消费者是不可见的。当本地事务执行完成之后，会返回成功或失败结果，只有返回成功这个半消息才会发送给消费者。
-<br>&emsp;我们使用一个具体场景来实践下事务消息：创建完订单之后清除购物车。这个过程中，我们假设在订单产生的瞬间发送事务消息给购物车系统，然后在本地事务的创建订单，然后根据创建结果决定是不是要清除购物车。整个过程的时序图如下：<br>
-![](https://github.com/PeterLu798/MQ.png)
+<br>&emsp;我们使用一个具体场景来实践下事务消息：创建完订单之后清除购物车。这个过程中，我们假设在订单产生的瞬间发送事务消息给购物车系统，然后在本地事务的创建订单，然后根据创建结果决定是不是要清除购物车。整个过程的时序图如下<br>
+![](https://github.com/PeterLu798/MQ/blob/master/src/main/java/com/lbj/mq/rocketmq/Z_RocketMQ_2.png)
 <br>根据时序图，订单系统在接收到消息之后，发送给MQ服务端一个半消息，然后本地创建订单，如果返回成功则MQ服务端会将半消息发送给购物车系统，然后就可以执行清除购物车逻辑了，如果返回失败则MQ服务端会将半消息删除掉，这样就不会发送给购物车系统，购物车里的商品也不会清除。但是如果创建订单成功/失败了，但是在返回的路上发生了网络故障丢了，也就是MQ服务端没拿到结果，这时RocketMQ的另一个机制就登台了：定时查询事务状态接口，根据结果继续执行投递消息或者删除消息的逻辑。为了支持这个机制，我们需要在订单系统写一个订单是否创建成功的查询接口。
 <br>&emsp;事务消息的具体实现可以参考com.lbj.mq.rocketmq.TransactionListenerImpl和com.lbj.mq.rocketmq.TransactionProducer
 
@@ -151,58 +151,17 @@ App -> 网关 -> 令牌队列 -> 秒杀服务 <br>
 <br>&emsp;举个例子，10个搬运工，要把货车上的货物搬进库房，如果这10个人各干各的，每个人上车搬起货物，再下车搬进库房放好，然后再返回，如此反复，这就是同步作业。同步作业的最大问题就是效率低，最主要是占着连接资源不释放，其他请求只能等待。就像这里的工人，只要有人上下车他们就得等待。
 <br>&emsp;再看另外一种方式，2个人在车上专门往下送货，其他人将货物运进库房，这样就大大提高了效率，每个人不用再等待了，货很快就被搬完了，这就是异步作业。
 <br>&emsp;异步的优势这么明显，那么Java里提供了哪些异步的框架供我们使用呢？
-<br>&emsp;比较常用也比较流行的异步框架是CompletableFuture，该框架不仅提供了很多异步方法，还允许自定义线程池，来实现用户自己控制线程数。使用示例如下：
-```java
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-public class CompletableFutureTest {
-    private static ExecutorService executorService = Executors.newFixedThreadPool(1000);
-
-    /**
-     * 不需要返回值
-     */
-    public void test() {
-        for (int i = 0; i < 10000; i++) {
-            CompletableFuture.runAsync(() -> {
-                // TODO sth...
-            }, executorService);
-        }
-    }
-
-    /**
-     * 如果需要返回值，可配合使用CountDownLatch
-     *
-     * @return
-     */
-    public boolean test1() {
-        CountDownLatch countDownLatch = new CountDownLatch(10000);
-        for (int i = 0; i < 10000; i++) {
-            CompletableFuture.runAsync(() -> {
-                //TODO sth...
-            }, executorService).whenComplete((result, ex) -> countDownLatch.countDown());
-        }
-        try {
-            countDownLatch.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        return true;
-    }
-}
-```
+<br>&emsp;比较常用也比较流行的异步框架是CompletableFuture，该框架不仅提供了很多异步方法，还允许自定义线程池，来实现用户自己控制线程数。
 <h3 id="9">9. Java中的线程池和并发工具类</h3>
 <br>&emsp;加这节是因为上节说的异步框架中使用了线程池以及并发控制的工具类，那么这节就详细说说其使用方式及原理。
 <br>9.1 Executor架构体系
 <br>9.1.1 Executor两级调度模型
 <br>&emsp;我们知道线程池的出现是为了降低因不停的创建和销毁线程而带来的系统开销，在这个池子中，任务交由一个一个的线程去执行，这个机制的调度器就是Executor.
 <br>&emsp;下面是Executor框架的两级调度模型<br>
-![](https://github.com/PeterLu798/z_e_1.png)
+![](https://github.com/PeterLu798/MQ/blob/master/src/main/java/com/lbj/mq/executor/z_e_1.png)
 <br>&emsp;从上图可以看出上层的应用程序的任务和线程的对应关系由Executor框架管理。下层的调度由操作系统内核控制，不受应用程序的控制。
 <br>9.1.2 Executor的核心类图<br>
-![](https://github.com/PeterLu798/z_e_2.png)
+![](https://github.com/PeterLu798/MQ/blob/master/src/main/java/com/lbj/mq/executor/z_e_2.png)
 <br>9.1.3 ThreadPoolExecutor
 <br>&emsp;ThreadPoolExecutor是线程池的核心实现类，是我们最常用的线程池的实现类。先来看看它的运行原理。
 <br>&emsp;ThreadPoolExecutor构造函数有6个核心参数，这6个核心参数就掌控了整个线程池的运行：
@@ -357,7 +316,48 @@ public interface BlockingQueue<E> extends Queue<E> {
 * SynchronousQueue 是一个没有数据缓冲的BlockingQueue，生产者线程对其的插入操作put必须等待消费者的移除操作take，反过来也一样。不像ArrayBlockingQueue或LinkedListBlockingQueue，SynchronousQueue内部并没有数据缓存空间，你不能调用peek()方法来看队列中是否有数据元素，因为数据元素只有当你试着取走的时候才可能存在，不取走而只想偷窥一下是不行的，当然遍历这个队列的操作也是不允许的。队列头元素是第一个排队要插入数据的线程，而不是要交换的数据。数据是在配对的生产者和消费者线程之间直接传递的，并不会将数据缓冲数据到队列中。可以这样来理解：生产者和消费者互相等待对方，握手，然后一起离开。
 * DelayQueue 它的实现是借助于优先队列，也就是堆，和DelayedWorkQueue的实现原理差不多。
 <br>9.3 Java中的并发工具
-<br>9.3.1 CountDownLatch CountDownLatch 是一个同步工具类，它允许一个或多个线程一直等待，直到其他线程的操作执行完后再执行。CountDownLatch是通过一个计数器来实现的，计数器的初始值为并发的线程的数量，这个数量在构造函数指定。每当一个线程完成了自己的任务后，计数器的值就会减1。当计数器值到达0时，它表示所有的线程已经完成了任务，然后在闭锁上等待的线程就可以恢复执行任务。
+<br>9.3.1 CountDownLatch CountDownLatch 是一个同步工具类，它允许一个或多个线程一直等待，直到其他线程的操作执行完后再执行。CountDownLatch是通过一个计数器来实现的，计数器的初始值为并发的线程的数量，这个数量在构造函数指定。每当一个线程完成了自己的任务后，计数器的值就会减1。当计数器值到达0时，它表示所有的线程已经完成了任务，然后在闭锁上等待的线程就可以恢复执行任务。使用示例如下
+```java
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class CompletableFutureTest {
+    private static ExecutorService executorService = Executors.newFixedThreadPool(1000);
+
+    /**
+     * 不需要返回值
+     */
+    public void test() {
+        for (int i = 0; i < 10000; i++) {
+            CompletableFuture.runAsync(() -> {
+                // TODO sth...
+            }, executorService);
+        }
+    }
+
+    /**
+     * 如果需要返回值，可配合使用CountDownLatch
+     *
+     * @return
+     */
+    public boolean test1() {
+        CountDownLatch countDownLatch = new CountDownLatch(10000);
+        for (int i = 0; i < 10000; i++) {
+            CompletableFuture.runAsync(() -> {
+                //TODO sth...
+            }, executorService).whenComplete((result, ex) -> countDownLatch.countDown());
+        }
+        try {
+            countDownLatch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return true;
+    }
+}
+```
 <br>9.3.2 CyclicBarrier CyclicBarrier的字面意思是可循环使用(Cyclic)的屏障(Barrier)。它要做的事情是，让一组线程到达一个屏障时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续执行。
 <br>&emsp;CyclicBarrier使用例子
 ```java
@@ -493,6 +493,7 @@ public class ExchangerTest {
     }
 }
 ```
+<h3 id="10">10. 消息队列中的高性能序列化和反序列化</h3>
 <br>&emsp;
 <br>&emsp;
 <br>&emsp;
