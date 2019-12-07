@@ -1,9 +1,6 @@
 package com.lbj.mq.lock;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -28,6 +25,8 @@ public class CASBalance {
         }
         try {
             countDownLatch.await();
+            //还可以设置等待时间
+//            countDownLatch.await(100, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

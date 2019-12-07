@@ -28,6 +28,7 @@ public class LockBalance {
 
     public static void main(String[] args) {
         long startTime = System.currentTimeMillis();
+
         CountDownLatch count = new CountDownLatch(10000);
         for(int i=0; i<10000; i++){
             CompletableFuture.runAsync(() -> transfer(1), executorService)
